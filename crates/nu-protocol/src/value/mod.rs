@@ -1981,7 +1981,7 @@ impl Value {
     /// as it will point into unknown source when used in errors.
     ///
     /// Returns a `Vec` containing one of each value case (`Value::Int`, `Value::String`, etc.)
-    /// except for `Value::CustomValue`.
+    /// except for `Value::Custom`.
     pub fn test_values() -> Vec<Value> {
         vec![
             Value::test_bool(false),
@@ -3293,8 +3293,16 @@ impl Value {
 
     pub fn pow(&self, op: Span, rhs: &Value, span: Span) -> Result<Value, ShellError> {
         match (self, rhs) {
-            (Value::Int { val: lhs, .. }, Value::Int { val: rhs, .. }) => {
-                if let Some(val) = lhs.checked_pow(*rhs as u32) {
+            (Value::Int { val: lhs, .. }, Value::Int { val: rhsv, .. }) => {
+                if *rhsv < 0 {
+                    return Err(ShellError::IncorrectValue {
+                        msg: "Negative exponent for integer power is unsupported; use floats instead.".into(),
+                        val_span: rhs.span(),
+                        call_span: op,
+                    });
+                }
+
+                if let Some(val) = lhs.checked_pow(*rhsv as u32) {
                     Ok(Value::int(val, span))
                 } else {
                     Err(ShellError::OperatorOverflow {
@@ -4070,7 +4078,7 @@ fn operator_type_error(
     }
 }
 
-fn human_time_from_now(val: &DateTime<FixedOffset>) -> HumanTime {
+pub fn human_time_from_now(val: &DateTime<FixedOffset>) -> HumanTime {
     let now = Local::now().with_timezone(val.offset());
     let delta = *val - now;
     match delta.num_nanoseconds() {
